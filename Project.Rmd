@@ -1,28 +1,129 @@
 ---
 title: "Group 23 Static Graphics Project"
-output: html_document
+author: "Andy Lin, Daniel Lee, Piyush Puri"
+date: "Draft Due Tuesday, November 14th"
+output: 
+  html_document:
+    toc:  true
+    toc_float:  true
+    code_folding:  hide
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggmap)
+library(dplyr)
+library(lubridate)
+police_data <- read.csv("https://raw.githubusercontent.com/fivethirtyeight/data/master/police-killings/police_killings.csv")
 ```
 
-## Including Plots
+```{r, message=FALSE, warning=FALSE}
+map <- get_map(location = 'United States', zoom = 4)
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+ggmap(map) + geom_point(aes(x = longitude, y = latitude, color = raceethnicity, 
+                          shape = gender, alpha = 0.5), size = 3, 
+                        data = police_data) + 
+  labs(color = "Race/Ethnicity",
+       title = "Police Killings in the United States by Race",
+       x = "", y = "", shape = "Gender") + guides(size=FALSE, alpha=FALSE) + 
+  theme(axis.title.x=element_blank(),axis.text.x=element_blank(), 
+        axis.ticks.x=element_blank(), axis.title.y=element_blank(),
+        axis.text.y=element_blank(), axis.ticks.y=element_blank())
+ggsave("ShootingsPointMap.png", path = "/Users/piyushpuri/Desktop")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r, warning=FALSE, message=FALSE}
+df <- data.frame(state.abb, state.name)
+
+all_states <- map_data("state")
+data$region <- df$state.name[match(data$state, df$state.abb)]
+data$region <- sapply(data$region, tolower)
+
+us <- map_data("state")
+
+x <- data.frame(table(data$region))
+
+data$murder <- rep(0, nrow(data))
+
+
+for (state in na.omit(unique(data$region))) {
+  data$murder[data$region == state] = x$Freq[x$Var1 == state]
+}
+
+gg <- ggplot()
+gg <- gg + geom_map(data=us, map=us,
+                    aes(x=long, y=lat, map_id=region),
+                    fill="#ffffff", color="#ffffff", size=0.15)
+gg <- gg + geom_map(data=data, map=us,
+                    aes(fill=murder, map_id=region),
+                    color="#ffffff", size=0.15)
+gg <- gg + scale_fill_continuous(low='thistle2', high='darkred', 
+                                 guide='colorbar')
+gg <- gg + labs(x=NULL, y=NULL, title = "Police Killings Across the United States", 
+                fill = "Killings")
+gg <- gg + coord_map("albers", lat0 = 39, lat1 = 45) 
+gg <- gg + theme(panel.border = element_blank())
+gg <- gg + theme(panel.background = element_blank())
+gg <- gg + theme(axis.ticks = element_blank())
+gg <- gg + theme(axis.text = element_blank())
+gg 
+ggsave("ShootingsMap.png", path = "/Users/piyushpuri/Desktop")
+```
+
+```{r, warning=FALSE, message=FALSE}
+police_data <- mutate(police_data, 
+                    age_group = cut(as.numeric(as.character(age)), c(0, 20, 40, 60, 100), 
+                                      labels = c("0-20", "20-40","40-60",
+                                                 "60-100")))
+ggplot(na.omit(police_data), aes(as.numeric(as.character(h_income)))) + 
+  geom_histogram(color = "#013243", fill = "#446CB3") + 
+  geom_vline(xintercept = as.numeric(56500), linetype=4, color = "red") +
+  facet_wrap(~age_group) + 
+  theme(axis.text.x = element_text(hjust= 1)) +
+  labs(title = "Household Income Distribution based on Gender and Age Groups",
+       x = "Household Income", y = "Number of Victims", 
+       subtitle = "Red Line: Real Median Household Income (2015)")
+ggsave("FacetHist.png", path = "/Users/piyushpuri/Desktop")
+```
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(police_data, aes(x = college, y = as.numeric(as.character(p_income)))) + geom_point(aes(color = cause)) +
+  labs(x = "College Graduation Rate (BA or higher)", y = "Average Personal Income",
+       color = "Cause of Death", title = "Cause of Victim Death By Income and Education")
+ggsave("VictimsScatterplot.png", path = "/Users/piyushpuri/Desktop")
+```
+
+```{r, warning=FALSE, message=FALSE}
+police_data$Date <- as.Date(paste(match(data$month, month.name) , data$day , sep = "/" )  , format = "%m/%d" )
+year(police_data$Date) <- 2015
+ggplot(police_data, aes(x = Date)) + 
+  geom_line(aes(colour = "orange"), stat = "count") + 
+  geom_line(aes(colour = "blue"), stat = "count", data = police_data[which(police_data$raceethnicity == "Black"),]) + 
+  geom_vline(xintercept = as.numeric(as.Date("2015-04-12")), linetype=2, color = "black", size=1) +
+  scale_color_discrete(name = "Race/Ethnicity", labels = c("Black", "Total")) + 
+  labs(y = "Number of Fatal Shootings", title = "Number of Shootings by Day",
+       subtitle = "Black Line: Freddie Gray Shooting") 
+ggsave("TimeSeriesPlot.png", path = "/Users/piyushpuri/Desktop") 
+```
+
+```{r, warning=FALSE, message=FALSE}
+#running levels code more than once messes up data
+levels(police_data$armed)[4] = "Unarmed"
+levels(police_data$armed)[c(2,3,5,8)] = "Armed"
+levels(police_data$armed)[c(1,5)] = "Unsure"
+```
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(police_data, aes(x = raceethnicity, fill = armed)) + geom_bar(position = "fill") +
+  labs(fill = "Weapon", x = "Race/Ethnicity", y = "Proportion of Shootings",
+       title = "Proportion of Shooting Victims That Were Armed or Unarmed") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave("StackedHist.png", path = "/Users/piyushpuri/Desktop")
+```
+
+
